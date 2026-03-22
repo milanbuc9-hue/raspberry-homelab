@@ -398,9 +398,15 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - DATA_DIR=/app/data
+      - INFISICAL_TOKEN=${INFISICAL_TOKEN:-}
+      - INFISICAL_SITE_URL=http://infisical:8080
     volumes:
       - ./docker_data/gym-tracker/data:/app/data
       - ./docker_data/gym-tracker/static/uploads:/app/public/uploads
+    depends_on:
+      infisical:
+        condition: service_healthy
+        required: false
 
   gym-tracker:
     build: ./docker_data/gym-tracker
@@ -421,6 +427,83 @@ services:
       - ./docker_data/gym-tracker/data:/app/data
       - ./docker_data/gym-tracker/templates:/app/templates
       - ./docker_data/gym-tracker/static:/app/static
+
+  # === SECRETS MANAGEMENT ===
+
+  infisical-db:
+    image: postgres:14-alpine
+    container_name: infisical-db
+    restart: unless-stopped
+    networks: [smarthome]
+    environment:
+      POSTGRES_DB: infisical
+      POSTGRES_USER: infisical
+      POSTGRES_PASSWORD: ${INFISICAL_DB_PASSWORD:-infisical-db-pass}
+    volumes:
+      - /home/milan/docker_data/infisical/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical"]
+      interval: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  infisical-redis:
+    image: redis:7-alpine
+    container_name: infisical-redis
+    restart: unless-stopped
+    networks: [smarthome]
+    command: redis-server --requirepass ${INFISICAL_REDIS_PASSWORD:-infisical-redis-pass}
+    volumes:
+      - /home/milan/docker_data/infisical/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${INFISICAL_REDIS_PASSWORD:-infisical-redis-pass}", "ping"]
+      interval: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+
+  infisical:
+    image: infisical/infisical:latest-postgres
+    container_name: infisical
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["8096:8080"]
+    depends_on:
+      infisical-db:
+        condition: service_healthy
+      infisical-redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DB_CONNECTION_URI: postgresql://infisical:${INFISICAL_DB_PASSWORD:-infisical-db-pass}@infisical-db:5432/infisical
+      REDIS_URL: redis://:${INFISICAL_REDIS_PASSWORD:-infisical-redis-pass}@infisical-redis:6379
+      ENCRYPTION_KEY: ${INFISICAL_ENCRYPTION_KEY}
+      AUTH_SECRET: ${INFISICAL_AUTH_SECRET}
+      SITE_URL: http://100.74.234.99:8096
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM:-noreply@milanbuchta.com}
+      SMTP_FROM_NAME: Infisical
+      SMTP_USERNAME: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASS:-}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.75'
 
   # cloudflared läuft als systemd service auf dem Host (nicht Docker)
   # sudo systemctl status cloudflared
