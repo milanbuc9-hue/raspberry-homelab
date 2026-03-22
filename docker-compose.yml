@@ -388,6 +388,20 @@ services:
     volumes:
       - ./docker_data/changelog:/usr/share/nginx/html:ro
 
+  gym-tracker-next:
+    build: ./gym-tracker-next
+    container_name: gym-tracker-next
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["3002:3000"]
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-change-me}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - DATA_DIR=/app/data
+    volumes:
+      - ./docker_data/gym-tracker/data:/app/data
+      - ./docker_data/gym-tracker/static/uploads:/app/public/uploads
+
   gym-tracker:
     build: ./docker_data/gym-tracker
     container_name: gym-tracker
