@@ -1,0 +1,36 @@
+# Secrets
+.env
+
+# Docker-Daten (zu groß, nicht im Repo)
+docker_data/
+
+# Backups
+backups/
+
+# Logs
+*.log
+logs/
+
+# Temporäre Dateien
+*.tmp
+*.bak
+*.old
+
+# System
+.bash_history
+.cache/
+.local/
+.config/
+.claude/
+.cursor/
+.cursor-server/
+.expo/
+.npm/
+.docker/
+.ssh/
+
+# Sonstiges
+whatsapp_qr.png
+qr_response.json
+n8n_task.txt
+index.html

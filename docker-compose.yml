@@ -1,0 +1,430 @@
+networks:
+  smarthome:
+    driver: bridge
+    ipam:
+      config: [{ subnet: 172.20.0.0/24 }]
+
+services:
+  # === CORE INFRASTRUCTURE ===
+  
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTHKEY}
+      - TS_EXTRA_ARGS=--accept-routes --hostname=milan-homelab
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+    volumes:
+      - /home/milan/docker_data/tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+  # === HOME AUTOMATION ===
+  
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /home/milan/docker_data/homeassistant:/config
+      - /run/dbus:/run/dbus:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on: [matter-server, openthread]
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '2.5'
+        reservations:
+          memory: 768M
+
+  openthread:
+    image: openthread/otbr:latest
+    container_name: openthread
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    environment:
+      - INFRA_IF_NAME=eth0
+      - FIREWALL=0
+      - BACKBONE_ROUTER=1
+      - NAT64=0
+    devices:
+      - /dev/serial/by-id/usb-SMLIGHT_SMLIGHT_SLZB-07_ec4f065cbb18f01185dd6a7db887153e-if00-port0:/dev/ttyUSB0
+    volumes:
+      - /home/milan/docker_data/otbr:/var/lib/thread
+    command: --radio-url spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1'
+
+  otbr-web:
+    image: alpine/socat
+    container_name: otbr-web
+    restart: unless-stopped
+    network_mode: host
+    command: tcp-listen:8088,fork,reuseaddr,bind=0.0.0.0 tcp:127.0.0.1:80
+
+  matter-server:
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: matter-server
+    restart: unless-stopped
+    network_mode: host
+    security_opt: [apparmor:unconfined]
+    volumes:
+      - /home/milan/docker_data/matter:/data
+      - /run/dbus:/run/dbus:ro
+    command: --storage-path /data --primary-interface eth0
+    depends_on: [openthread]
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1'
+
+  # === AUTOMATION & WORKFLOWS ===
+  
+  n8n-postgres:
+    image: postgres:15-alpine
+    container_name: n8n-postgres
+    restart: unless-stopped
+    networks: [smarthome]
+    environment:
+      POSTGRES_DB: n8n
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${N8N_DB_PASSWORD}
+    volumes:
+      - /home/milan/docker_data/n8n-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n"]
+      interval: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1'
+    command: postgres -c shared_buffers=256MB -c effective_cache_size=1GB -c max_connections=150 -c work_mem=4MB
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    user: "1000:1000"
+    restart: unless-stopped
+    depends_on:
+      n8n-postgres:
+        condition: service_healthy
+    networks: [smarthome]
+    ports: ["5678:5678"]
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: n8n-postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_SECURE_COOKIE: "false"
+      TZ: Europe/Berlin
+      GENERIC_TIMEZONE: Europe/Berlin
+      N8N_METRICS: "true"
+      N8N_DEFAULT_BINARY_DATA_MODE: filesystem
+    volumes:
+      - /home/milan/docker_data/n8n:/home/node/.n8n
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '1.5'
+        reservations:
+          memory: 512M
+
+  # --- DATENBANK ---
+  evolution-api:
+    image: atendai/evolution-api:latest
+    container_name: evolution-api
+    restart: unless-stopped
+    depends_on:
+      n8n-postgres:
+        condition: service_healthy
+    networks:
+      - smarthome
+    ports:
+      - "8089:8080"
+    volumes:
+      - /home/milan/docker_data/evolution-instances:/evolution/instances
+      - /home/milan/docker_data/evolution-store:/evolution/store
+    environment:
+      SERVER_URL: http://localhost:8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: "postgresql://evolution:${EVOLUTION_DB_PASSWORD}@n8n-postgres:5432/evolution"
+      DEL_INSTANCE: "false"
+      QRCODE_LIMIT: "30"
+      TZ: Europe/Berlin
+      CONFIG_SESSION_PHONE_VERSION: "2.3000.1035194821"
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+          cpus: '1.5'
+          
+  # === MONITORING & OBSERVABILITY ===
+  
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - smarthome
+    ports:
+      - 8082:8080
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.cpu'
+      - '--collector.thermal_zone'
+    volumes:
+      - /:/host:ro,rslave
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    networks: [smarthome]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports: ["9090:9090"]
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    volumes:
+      - /home/milan/docker_data/prometheus:/prometheus
+      - /home/milan/docker_data/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /home/milan/docker_data/prometheus/ha_token.txt:/etc/prometheus/ha_token.txt:ro
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: blackbox-exporter
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["9115:9115"]
+    volumes:
+      - /home/milan/docker_data/blackbox/config.yml:/etc/blackbox_exporter/config.yml:ro
+    command: --config.file=/etc/blackbox_exporter/config.yml
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
+    volumes:
+      - /home/milan/docker_data/grafana:/var/lib/grafana
+      - /home/milan/docker_data/grafana/provisioning:/etc/grafana/provisioning
+      - /home/milan/docker_data/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on: [prometheus]
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+          cpus: '0.5'
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["3001:3001"]
+    volumes:
+      - /home/milan/docker_data/uptime-kuma:/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+          cpus: '0.5'
+
+  # === BACKUP ===
+  
+  duplicati:
+    image: linuxserver/duplicati:latest
+    container_name: duplicati
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["8200:8200"]
+    environment:
+      PUID: 0
+      PGID: 0
+      TZ: Europe/Berlin
+      SETTINGS_ENCRYPTION_KEY: ${DUPLICATI_ENCRYPTION_KEY}
+      CLI_ARGS: "--webservice-password=${DUPLICATI_PASSWORD}"
+    volumes:
+      - /home/milan/docker_data/duplicati:/config
+      - /home/milan/docker_data:/source/docker_data:ro
+      - /home/milan/docker-compose.yml:/source/docker-compose.yml:ro
+      - /home/milan/.env:/source/.env:ro
+      - /home/milan/scripts:/source/scripts:ro
+      - /home/milan/backups:/backups
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+          cpus: '1'
+
+  # === DEVELOPMENT ===
+  
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: code-server
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Berlin
+      - PASSWORD=${CODE_PASSWORD}
+    volumes:
+      - /home/milan/docker_data/code-server:/config
+      - /home/milan:/config/workspace
+    ports:
+      - 8443:8443
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=Europe/Berlin
+      - DOCKER_API_VERSION=1.44
+    command: --schedule "0 0 4 * * *" --cleanup
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["9000:9000"]
+    volumes:
+      - portainer_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  changelog:
+    image: nginx:alpine
+    container_name: changelog
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["8090:80"]
+    volumes:
+      - ./docker_data/changelog:/usr/share/nginx/html:ro
+
+  gym-tracker:
+    build: ./docker_data/gym-tracker
+    container_name: gym-tracker
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["8091:5000"]
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-change-me-set-a-real-64-byte-hex-secret-in-dot-env}
+      - LEGACY_ADMIN_USERNAME=${LEGACY_ADMIN_USERNAME:-milan}
+      - LEGACY_ADMIN_PASSWORD=${LEGACY_ADMIN_PASSWORD:-admin123}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - RESEND_FROM=Gym Tracker <noreply@milanbuchta.com>
+      - CORS_ORIGINS=https://api.milanbuchta.com,http://192.168.0.122:8091,http://100.74.234.99:8091
+    volumes:
+      - ./docker_data/gym-tracker/data:/app/data
+      - ./docker_data/gym-tracker/templates:/app/templates
+      - ./docker_data/gym-tracker/static:/app/static
+
+  # cloudflared läuft als systemd service auf dem Host (nicht Docker)
+  # sudo systemctl status cloudflared
+
+  whisper:
+    image: rhasspy/wyoming-whisper:latest
+    container_name: whisper
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["10300:10300"]
+    command: --model tiny-int8 --language de
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1'
+
+
+volumes:
+  portainer_data:
+    driver: local
