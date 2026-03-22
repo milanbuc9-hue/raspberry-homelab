@@ -1,0 +1,90 @@
+{
+  "title": "🏠 Home Assistant",
+  "uid": "home-assistant",
+  "tags": ["homeassistant", "temperature"],
+  "timezone": "Europe/Berlin",
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {
+      "id": 1, "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "title": "🌡️ Raumtemperatur jetzt",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [{"expr": "homeassistant_sensor_temperature_celsius{friendly_name=\"Heizung Temperatur\"}", "legendFormat": "Temperatur"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "area"},
+      "fieldConfig": {"defaults": {"unit": "celsius", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}, {"color": "green", "value": 19}, {"color": "orange", "value": 23}, {"color": "red", "value": 26}]}}}
+    },
+    {
+      "id": 2, "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "title": "🎯 Zieltemperatur",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [{"expr": "homeassistant_climate_target_temperature_celsius", "legendFormat": "Ziel"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"},
+      "fieldConfig": {"defaults": {"unit": "celsius"}}
+    },
+    {
+      "id": 3, "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "title": "📱 Pixel 9 Akku-Temp",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [{"expr": "homeassistant_sensor_temperature_celsius{friendly_name=~\".*Battery.*\"}", "legendFormat": "Akku"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"},
+      "fieldConfig": {"defaults": {"unit": "celsius", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 38}, {"color": "red", "value": 45}]}}}
+    },
+    {
+      "id": 4, "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "title": "Min/Max heute",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [
+        {"expr": "min_over_time(homeassistant_sensor_temperature_celsius{friendly_name=\"Heizung Temperatur\"}[24h])", "legendFormat": "Min 24h"},
+        {"expr": "max_over_time(homeassistant_sensor_temperature_celsius{friendly_name=\"Heizung Temperatur\"}[24h])", "legendFormat": "Max 24h"}
+      ],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "colorMode": "value"},
+      "fieldConfig": {"defaults": {"unit": "celsius"}}
+    },
+    {
+      "id": 10, "gridPos": {"h": 10, "w": 24, "x": 0, "y": 4},
+      "title": "🌡️ Raumtemperatur Verlauf",
+      "type": "timeseries",
+      "datasource": {"uid": "prometheus"},
+      "targets": [
+        {"expr": "homeassistant_sensor_temperature_celsius{friendly_name=\"Heizung Temperatur\"}", "legendFormat": "Ist-Temperatur"},
+        {"expr": "homeassistant_climate_target_temperature_celsius", "legendFormat": "Ziel-Temperatur"}
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "celsius", "custom": {"lineWidth": 2, "fillOpacity": 10}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Ziel-Temperatur"}, "properties": [{"id": "custom.lineStyle", "value": {"dash": [10, 10], "fill": "dash"}}, {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]}
+        ]
+      },
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      }
+    },
+    {
+      "id": 11, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "title": "📊 Temperatur Tagesrhythmus (7 Tage Ø)",
+      "type": "timeseries",
+      "datasource": {"uid": "prometheus"},
+      "targets": [
+        {"expr": "avg_over_time(homeassistant_sensor_temperature_celsius{friendly_name=\"Heizung Temperatur\"}[7d])", "legendFormat": "7-Tage Ø"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "celsius", "custom": {"lineWidth": 2, "fillOpacity": 20}}}
+    },
+    {
+      "id": 12, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "title": "🌡️ Alle Temperatursensoren",
+      "type": "timeseries",
+      "datasource": {"uid": "prometheus"},
+      "targets": [
+        {"expr": "homeassistant_sensor_temperature_celsius", "legendFormat": "{{friendly_name}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "celsius", "custom": {"lineWidth": 2}}}
+    }
+  ],
+  "schemaVersion": 38
+}

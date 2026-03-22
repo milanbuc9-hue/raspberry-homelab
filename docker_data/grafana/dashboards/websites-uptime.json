@@ -1,0 +1,99 @@
+{
+  "title": "🌐 Websites & Uptime",
+  "uid": "websites-uptime",
+  "tags": ["uptime", "websites", "blackbox"],
+  "timezone": "Europe/Berlin",
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {
+      "id": 1, "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "title": "gym-tracker (lokal)",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [{"expr": "probe_success{instance=\"http://172.20.0.1:8091\"}", "legendFormat": "Status"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "id": 2, "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "title": "api.milanbuchta.com",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [{"expr": "probe_success{instance=\"https://api.milanbuchta.com\"}", "legendFormat": "Status"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "id": 3, "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "title": "milanbuchta.com",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [{"expr": "probe_success{instance=\"https://milanbuchta.com\"}", "legendFormat": "Status"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "id": 4, "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "title": "Home Assistant",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [{"expr": "probe_success{instance=\"http://172.20.0.1:8123\"}", "legendFormat": "Status"}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "id": 10, "gridPos": {"h": 8, "w": 24, "x": 0, "y": 4},
+      "title": "⏱️ Response Time (ms)",
+      "type": "timeseries",
+      "datasource": {"uid": "prometheus"},
+      "targets": [
+        {"expr": "probe_duration_seconds{instance=\"http://172.20.0.1:8091\"} * 1000", "legendFormat": "gym-tracker lokal"},
+        {"expr": "probe_duration_seconds{instance=\"https://api.milanbuchta.com\"} * 1000", "legendFormat": "api.milanbuchta.com"},
+        {"expr": "probe_duration_seconds{instance=\"https://milanbuchta.com\"} * 1000", "legendFormat": "milanbuchta.com"},
+        {"expr": "probe_duration_seconds{instance=\"http://172.20.0.1:8123\"} * 1000", "legendFormat": "Home Assistant"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"lineWidth": 2, "fillOpacity": 10}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500}, {"color": "red", "value": 2000}]}}}
+    },
+    {
+      "id": 11, "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "title": "✅ Uptime-Status Verlauf (1 = UP, 0 = DOWN)",
+      "type": "timeseries",
+      "datasource": {"uid": "prometheus"},
+      "targets": [
+        {"expr": "probe_success{instance=\"http://172.20.0.1:8091\"}", "legendFormat": "gym-tracker lokal"},
+        {"expr": "probe_success{instance=\"https://api.milanbuchta.com\"}", "legendFormat": "api.milanbuchta.com"},
+        {"expr": "probe_success{instance=\"https://milanbuchta.com\"}", "legendFormat": "milanbuchta.com"},
+        {"expr": "probe_success{instance=\"http://172.20.0.1:8123\"}", "legendFormat": "Home Assistant"}
+      ],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "custom": {"lineWidth": 2, "fillOpacity": 20}, "mappings": [{"type": "value", "options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}}]}}
+    },
+    {
+      "id": 12, "gridPos": {"h": 6, "w": 12, "x": 0, "y": 20},
+      "title": "📊 Uptime % (24h)",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [
+        {"expr": "avg_over_time(probe_success{instance=\"http://172.20.0.1:8091\"}[24h]) * 100", "legendFormat": "gym-tracker lokal"},
+        {"expr": "avg_over_time(probe_success{instance=\"https://api.milanbuchta.com\"}[24h]) * 100", "legendFormat": "api.milanbuchta.com"},
+        {"expr": "avg_over_time(probe_success{instance=\"https://milanbuchta.com\"}[24h]) * 100", "legendFormat": "milanbuchta.com"},
+        {"expr": "avg_over_time(probe_success{instance=\"http://172.20.0.1:8123\"}[24h]) * 100", "legendFormat": "Home Assistant"}
+      ],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "colorMode": "background"},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 95}, {"color": "green", "value": 99}]}}}
+    },
+    {
+      "id": 13, "gridPos": {"h": 6, "w": 12, "x": 12, "y": 20},
+      "title": "🔒 SSL Zertifikat läuft ab in (Tage)",
+      "type": "stat",
+      "datasource": {"uid": "prometheus"},
+      "targets": [
+        {"expr": "(probe_ssl_earliest_cert_expiry{instance=\"https://api.milanbuchta.com\"} - time()) / 86400", "legendFormat": "api.milanbuchta.com"},
+        {"expr": "(probe_ssl_earliest_cert_expiry{instance=\"https://milanbuchta.com\"} - time()) / 86400", "legendFormat": "milanbuchta.com"}
+      ],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "colorMode": "background"},
+      "fieldConfig": {"defaults": {"unit": "d", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 14}, {"color": "green", "value": 30}]}}}
+    }
+  ],
+  "schemaVersion": 38
+}

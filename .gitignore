@@ -1,8 +1,35 @@
 # Secrets
 .env
 
-# Docker-Daten (zu groß, nicht im Repo)
-docker_data/
+# Docker-Daten: alles ignorieren außer explizite Configs
+docker_data/*
+
+# Prometheus
+!docker_data/prometheus/
+docker_data/prometheus/*
+!docker_data/prometheus/prometheus.yml
+
+# Blackbox
+!docker_data/blackbox/
+docker_data/blackbox/*
+!docker_data/blackbox/config.yml
+
+# Grafana (nur Provisioning + Dashboards, keine Datenbanken/Plugins)
+!docker_data/grafana/
+docker_data/grafana/*
+!docker_data/grafana/provisioning/
+docker_data/grafana/provisioning/*
+!docker_data/grafana/provisioning/datasources/
+docker_data/grafana/provisioning/datasources/*
+!docker_data/grafana/provisioning/datasources/prometheus.yml
+!docker_data/grafana/provisioning/dashboards/
+docker_data/grafana/provisioning/dashboards/*
+!docker_data/grafana/provisioning/dashboards/dashboards.yml
+!docker_data/grafana/dashboards/
+docker_data/grafana/dashboards/*
+!docker_data/grafana/dashboards/home-assistant.json
+!docker_data/grafana/dashboards/raspberry-pi.json
+!docker_data/grafana/dashboards/websites-uptime.json
 
 # Backups
 backups/
