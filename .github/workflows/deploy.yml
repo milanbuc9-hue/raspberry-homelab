@@ -24,4 +24,4 @@ jobs:
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=15 \
             ${{ secrets.PI_USER }}@${{ secrets.PI_HOST }} \
-            "cd /home/milan && git pull origin main && docker compose up -d --remove-orphans"
+            "cd /home/milan && git pull origin main && docker compose up -d --build --remove-orphans"
