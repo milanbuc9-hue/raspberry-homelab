@@ -8,11 +8,14 @@
 PC_IP="100.78.126.104"
 PC_USER="${BACKUP_PC_USER:-milo}"
 PC_DEST="${BACKUP_PC_DEST:-/home/$PC_USER/raspberry-backup}"
+PC_ENCRYPTED_DEST="/home/$PC_USER/raspberry-backup-encrypted"
 KEEP_SNAPSHOTS=4
+KEEP_ENCRYPTED=7
 LOG_FILE="/home/milan/backups/logs/pc-backup.log"
 LAST_SUCCESS_FILE="/home/milan/backups/logs/last-pc-backup-success"
 TELEGRAM_BOT="8577766573:AAFkMIeGMRaE9tTGP8S1L6cJrP1ebDNgKNU"
 TELEGRAM_CHAT="6372069186"
+GPG_PASSPHRASE="${GPG_PASSPHRASE:-$(grep GPG_PASSPHRASE /home/milan/.env | cut -d= -f2)}"
 
 # ---- Hilfsfunktionen ----
 log() { echo "[$(date '+%d.%m.%Y %H:%M:%S')] $*" | tee -a "$LOG_FILE"; }
@@ -89,12 +92,52 @@ if [ $RSYNC_EXIT -eq 0 ]; then
   log "✅ Snapshot ${SNAPSHOT} erfolgreich | Dauer: ${DURATION}s | Gesamt: ${SIZE}"
   date +%s > "$LAST_SUCCESS_FILE"
 
+  # ---- GPG-verschlüsseltes Archiv (einmal täglich) ----
+  LAST_ENCRYPTED="/home/milan/backups/logs/last-gpg-encrypted"
+  TODAY=$(date +%Y-%m-%d)
+  LAST_ENC_DAY=$(cat "$LAST_ENCRYPTED" 2>/dev/null || echo "")
+
+  if [ "$LAST_ENC_DAY" != "$TODAY" ]; then
+    log "GPG: Erstelle verschlüsseltes Archiv für ${TODAY}..."
+    GPG_FILE="raspberry-${TODAY}.tar.gz.gpg"
+
+    ssh -o StrictHostKeyChecking=no "${PC_USER}@${PC_IP}" "mkdir -p ${PC_ENCRYPTED_DEST}" 2>/dev/null
+
+    # tar + gpg läuft auf dem PC selbst (Snapshot liegt dort)
+    ssh -o StrictHostKeyChecking=no "${PC_USER}@${PC_IP}" \
+      "tar czf - -C '${SNAPSHOT_DIR}' . 2>/dev/null \
+       | gpg --symmetric --batch --yes \
+             --passphrase '${GPG_PASSPHRASE}' \
+             --cipher-algo AES256 \
+             --compress-algo none \
+             -o '${PC_ENCRYPTED_DEST}/${GPG_FILE}'"
+
+    GPG_EXIT=$?
+
+    if [ $GPG_EXIT -eq 0 ]; then
+      # Alte verschlüsselte Archive löschen, nur KEEP_ENCRYPTED behalten
+      ssh -o StrictHostKeyChecking=no "${PC_USER}@${PC_IP}" \
+        "ls -1 ${PC_ENCRYPTED_DEST}/raspberry-*.tar.gz.gpg 2>/dev/null | sort | head -n -${KEEP_ENCRYPTED} | xargs -r rm -f" 2>/dev/null
+
+      GPG_SIZE=$(ssh -o StrictHostKeyChecking=no "${PC_USER}@${PC_IP}" \
+        "du -sh ${PC_ENCRYPTED_DEST}/${GPG_FILE} 2>/dev/null | cut -f1" 2>/dev/null || echo "?")
+
+      log "✅ GPG-Archiv erstellt: ${GPG_FILE} (${GPG_SIZE})"
+      echo "$TODAY" > "$LAST_ENCRYPTED"
+      GPG_STATUS="🔒 Encrypted: ${GPG_SIZE}"
+    else
+      log "❌ GPG-Archiv fehlgeschlagen (exit: $GPG_EXIT)"
+      GPG_STATUS="⚠️ Encryption fehlgeschlagen"
+    fi
+  else
+    GPG_STATUS="🔒 Encrypted: bereits heute erstellt"
+  fi
+
   # Telegram nur einmal täglich bei Erfolg
   LAST_NOTIFIED="/home/milan/backups/logs/last-telegram-success"
-  TODAY=$(date +%Y-%m-%d)
   LAST_DAY=$(cat "$LAST_NOTIFIED" 2>/dev/null || echo "")
   if [ "$LAST_DAY" != "$TODAY" ]; then
-    telegram "✅ *Backup auf PC erfolgreich*\n$(date '+%d.%m.%Y %H:%M')\nGesamt: ${SIZE} | Dauer: ${DURATION}s"
+    telegram "✅ *Backup auf PC erfolgreich*\n$(date '+%d.%m.%Y %H:%M')\nSnapshots: ${SIZE} | Dauer: ${DURATION}s\n${GPG_STATUS}"
     echo "$TODAY" > "$LAST_NOTIFIED"
   fi
 else
