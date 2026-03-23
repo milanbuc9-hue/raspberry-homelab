@@ -192,4 +192,5 @@ function runMigrations(db: Database.Database) {
   addCol('users', 'avatar_path', 'TEXT')
   addCol('users', 'email_verified', 'INTEGER DEFAULT 1')
   addCol('users', 'is_active', 'INTEGER DEFAULT 1')
+  addCol('users', 'is_admin', 'INTEGER DEFAULT 0')
 }

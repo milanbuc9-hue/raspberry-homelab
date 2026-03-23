@@ -110,7 +110,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
       <header className="bg-gray-900 border-b border-gray-800 px-4 py-4 flex items-center justify-between">
         <h1 className="text-xl font-bold">Gym Tracker</h1>
         <button onClick={logout} className="text-gray-400 hover:text-white text-sm transition-colors">
@@ -119,7 +118,6 @@ export default function DashboardPage() {
       </header>
 
       <div className="max-w-4xl mx-auto p-4 flex flex-col gap-4 md:flex-row">
-        {/* Workout list */}
         <div className="md:w-72 shrink-0 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-gray-300">Workouts</h2>
@@ -185,7 +183,6 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Workout detail */}
         <div className="flex-1">
           {!selected ? (
             <div className="bg-gray-900 rounded-2xl p-8 text-center text-gray-500">
@@ -207,7 +204,6 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {/* Exercises */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-gray-300">Exercises</h3>
@@ -233,50 +229,21 @@ export default function DashboardPage() {
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="text-xs text-gray-400">Sets</label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={newExercise.sets}
-                          onChange={e => setNewExercise(f => ({ ...f, sets: Number(e.target.value) }))}
-                          className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
-                        />
+                        <input type="number" min={0} value={newExercise.sets} onChange={e => setNewExercise(f => ({ ...f, sets: Number(e.target.value) }))} className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500" />
                       </div>
                       <div>
                         <label className="text-xs text-gray-400">Reps</label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={newExercise.reps}
-                          onChange={e => setNewExercise(f => ({ ...f, reps: Number(e.target.value) }))}
-                          className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
-                        />
+                        <input type="number" min={0} value={newExercise.reps} onChange={e => setNewExercise(f => ({ ...f, reps: Number(e.target.value) }))} className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500" />
                       </div>
                       <div>
                         <label className="text-xs text-gray-400">Weight (kg)</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.5}
-                          value={newExercise.weight}
-                          onChange={e => setNewExercise(f => ({ ...f, weight: Number(e.target.value) }))}
-                          className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500"
-                        />
+                        <input type="number" min={0} step={0.5} value={newExercise.weight} onChange={e => setNewExercise(f => ({ ...f, weight: Number(e.target.value) }))} className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500" />
                       </div>
                     </div>
-                    <input
-                      type="text"
-                      placeholder="Notes (optional)"
-                      value={newExercise.notes}
-                      onChange={e => setNewExercise(f => ({ ...f, notes: e.target.value }))}
-                      className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-500"
-                    />
+                    <input type="text" placeholder="Notes (optional)" value={newExercise.notes} onChange={e => setNewExercise(f => ({ ...f, notes: e.target.value }))} className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500 placeholder-gray-500" />
                     <div className="flex gap-2">
-                      <button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 rounded-lg transition-colors">
-                        Add
-                      </button>
-                      <button type="button" onClick={() => setAddingEx(false)} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">
-                        Cancel
-                      </button>
+                      <button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 rounded-lg transition-colors">Add</button>
+                      <button type="button" onClick={() => setAddingEx(false)} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 rounded-lg transition-colors">Cancel</button>
                     </div>
                   </form>
                 )}
