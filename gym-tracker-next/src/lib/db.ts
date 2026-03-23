@@ -17,6 +17,7 @@ export function getDb(): Database.Database {
   _db.pragma('foreign_keys = ON')
 
   initSchema(_db)
+  runMigrations(_db)
   return _db
 }
 
@@ -161,4 +162,34 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
     CREATE INDEX IF NOT EXISTS idx_workout_shares_token ON workout_shares(share_token);
   `)
+}
+
+// Adds missing columns to tables that were created by the legacy Flask app
+function runMigrations(db: Database.Database) {
+  const addCol = (table: string, col: string, def: string) => {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`)
+    } catch {
+      // Column already exists – ignore
+    }
+  }
+
+  // workouts: Flask used `type` instead of `name`, no notes column
+  addCol('workouts', 'name', "TEXT NOT NULL DEFAULT ''")
+  addCol('workouts', 'notes', 'TEXT')
+
+  // Copy `type` → `name` for existing rows that have no name yet
+  db.exec(`UPDATE workouts SET name = type WHERE name = '' AND type IS NOT NULL`)
+
+  // exercises: Flask had no sets/reps/weight/notes/order_index
+  addCol('exercises', 'sets', 'INTEGER DEFAULT 0')
+  addCol('exercises', 'reps', 'INTEGER DEFAULT 0')
+  addCol('exercises', 'weight', 'REAL DEFAULT 0')
+  addCol('exercises', 'notes', 'TEXT')
+  addCol('exercises', 'order_index', 'INTEGER DEFAULT 0')
+
+  // users: may be missing newer columns
+  addCol('users', 'avatar_path', 'TEXT')
+  addCol('users', 'email_verified', 'INTEGER DEFAULT 1')
+  addCol('users', 'is_active', 'INTEGER DEFAULT 1')
 }
