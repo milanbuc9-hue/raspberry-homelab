@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Username must be at least 3 characters' }, { status: 400 })
   if (!password || password.length < 6)
     return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
-  if (!email || !email.includes('@'))
+  if (email && !email.includes('@'))
     return NextResponse.json({ error: 'Valid email address required' }, { status: 400 })
 
   const db = getDb()
@@ -20,13 +20,13 @@ export async function POST(req: NextRequest) {
   if (db.prepare('SELECT id FROM users WHERE username=? COLLATE NOCASE').get(username))
     return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
 
-  if (db.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE').get(email))
+  if (email && db.prepare('SELECT id FROM users WHERE email=? COLLATE NOCASE').get(email))
     return NextResponse.json({ error: 'Email already registered' }, { status: 409 })
 
   const pwHash = hashPassword(password)
   const result = db.prepare(
     'INSERT INTO users (username, email, password_hash, is_active, email_verified) VALUES (?, ?, ?, 1, 1)'
-  ).run(username, email, pwHash)
+  ).run(username, email || null, pwHash)
 
   const userId = result.lastInsertRowid as number
   const accessToken = generateAccessToken(userId, username)
