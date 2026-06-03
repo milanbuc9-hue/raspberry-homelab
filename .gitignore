@@ -1,5 +1,40 @@
 # Secrets
 .env
+.mcp.json
+.n8n_jwt_token_backup.txt
+.spotify-sync-token
+.spotify-sync-config.json
+*.token
+scripts/.ai-news-pg-cred-id
+scripts/.ai-news-workflow-id
+
+# Codex (Auth-Tokens, Session-Logs, persönlicher Kontext)
+.codex/
+
+# Claude CLI Config (Auth-Tokens, Account-Daten)
+.claude.json
+.claude.json.backup
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Datenbanken
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+
+# Session-/History-Logs
+*.jsonl
+
+# WhatsApp QR-Codes
+whatsapp_qr*.png
 
 # Docker-Daten: alles ignorieren außer explizite Configs
 docker_data/*

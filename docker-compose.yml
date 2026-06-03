@@ -5,24 +5,27 @@ networks:
       config: [{ subnet: 172.20.0.0/24 }]
 
 services:
+  # === DISCORD ===
+
+  discord-bot:
+    build: ./discord-bot
+    container_name: discord-bot
+    restart: unless-stopped
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_GUILD_ID: "1291440051007389778"
+      DISCORD_MEMBER_ROLE_ID: "1501721279684935886"
+      DISCORD_WELCOME_CHANNEL_ID: "1503531781008134245"
+      DISCORD_BOT_CHANNEL_ID: "1501720772186734724"
+      DISCORD_ROLLEN_CHANNEL_ID: "1503531777124204615"
+      DISCORD_VC_HUB_ID: "1503527719563038882"
+      DISCORD_VC_CATEGORY_ID: ""
+    networks: [smarthome]
+
   # === CORE INFRASTRUCTURE ===
   
-  tailscale:
-    image: tailscale/tailscale:latest
-    container_name: tailscale
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - TS_AUTHKEY=${TAILSCALE_AUTHKEY}
-      - TS_EXTRA_ARGS=--accept-routes --hostname=milan-homelab
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=false
-    volumes:
-      - /home/milan/docker_data/tailscale:/var/lib/tailscale
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
+  # tailscale: ENTFERNT — läuft als nativer systemd-Service (tailscaled)
+  # Doppelte Installation blockierte /dev/net/tun → 25.000+ Crash-Neustarts
 
   # === HOME AUTOMATION ===
   
@@ -54,11 +57,13 @@ services:
           memory: 768M
 
   openthread:
-    image: openthread/otbr:latest
+    image: openthread/otbr@sha256:0591371dae41c900536445cee25757da55cff11ffaaca1a4ee0a2a64a127bfd9
     container_name: openthread
     restart: unless-stopped
     network_mode: host
     privileged: true
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
     environment:
       - INFRA_IF_NAME=eth0
       - FIREWALL=0
@@ -68,6 +73,7 @@ services:
       - /dev/serial/by-id/usb-SMLIGHT_SMLIGHT_SLZB-07_ec4f065cbb18f01185dd6a7db887153e-if00-port0:/dev/ttyUSB0
     volumes:
       - /home/milan/docker_data/otbr:/var/lib/thread
+    entrypoint: ["/bin/bash", "-c", "rm -f /var/run/otbr-agent.pid; exec /app/etc/docker/test/docker_entrypoint.sh \"$$@\"", "--"]
     command: --radio-url spinel+hdlc+uart:///dev/ttyUSB0?uart-baudrate=460800
     deploy:
       resources:
@@ -76,22 +82,30 @@ services:
           cpus: '1'
 
   otbr-web:
-    image: alpine/socat
+    image: alpine/socat@sha256:7460121640bff33376cd25006e45920a69dc5b6ac3339b6db36bfff5d373afca
     container_name: otbr-web
     restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
     network_mode: host
     command: tcp-listen:8088,fork,reuseaddr,bind=0.0.0.0 tcp:127.0.0.1:80
 
   matter-server:
-    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    image: ghcr.io/home-assistant-libs/python-matter-server@sha256:170aa093ce91c76cde4cc390918307590f0f5558fcec93f913af3cb019e6562a
     container_name: matter-server
     restart: unless-stopped
     network_mode: host
+    privileged: true
     security_opt: [apparmor:unconfined]
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     volumes:
       - /home/milan/docker_data/matter:/data
-      - /run/dbus:/run/dbus:ro
-    command: --storage-path /data --primary-interface eth0
+      - /run/dbus:/run/dbus
+    command: --storage-path /data --primary-interface eth0 --bluetooth-adapter 0
     depends_on: [openthread]
     deploy:
       resources:
@@ -104,8 +118,11 @@ services:
   n8n-postgres:
     image: postgres:15-alpine
     container_name: n8n-postgres
-    restart: unless-stopped
+    restart: on-failure:5
     networks: [smarthome]
+    # Port nur intern - kein expose nach außen nötig
+    # ports:
+    #   - "5432:5432"
     environment:
       POSTGRES_DB: n8n
       POSTGRES_USER: n8n
@@ -127,7 +144,7 @@ services:
     image: n8nio/n8n:latest
     container_name: n8n
     user: "1000:1000"
-    restart: unless-stopped
+    restart: on-failure:5
     depends_on:
       n8n-postgres:
         condition: service_healthy
@@ -146,46 +163,31 @@ services:
       GENERIC_TIMEZONE: Europe/Berlin
       N8N_METRICS: "true"
       N8N_DEFAULT_BINARY_DATA_MODE: filesystem
+      NODE_FUNCTION_ALLOW_BUILTIN: fs,path
+      NODE_FUNCTION_ALLOW_EXTERNAL: "*"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
     volumes:
       - /home/milan/docker_data/n8n:/home/node/.n8n
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 45s
+      timeout: 10s
+      retries: 2
+      start_period: 180s
     deploy:
       resources:
         limits:
           memory: 2048M
           cpus: '1.5'
+          pids: 512
         reservations:
-          memory: 512M
+          memory: 768M
+    sysctls:
+      - net.ipv4.tcp_fin_timeout=20
+      - net.core.somaxconn=1024
 
-  # --- DATENBANK ---
-  evolution-api:
-    image: atendai/evolution-api:latest
-    container_name: evolution-api
-    restart: unless-stopped
-    depends_on:
-      n8n-postgres:
-        condition: service_healthy
-    networks:
-      - smarthome
-    ports:
-      - "8089:8080"
-    volumes:
-      - /home/milan/docker_data/evolution-instances:/evolution/instances
-      - /home/milan/docker_data/evolution-store:/evolution/store
-    environment:
-      SERVER_URL: http://localhost:8080
-      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
-      DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: "postgresql://evolution:${EVOLUTION_DB_PASSWORD}@n8n-postgres:5432/evolution"
-      DEL_INSTANCE: "false"
-      QRCODE_LIMIT: "30"
-      TZ: Europe/Berlin
-      CONFIG_SESSION_PHONE_VERSION: "2.3000.1035194821"
-    deploy:
-      resources:
-        limits:
-          memory: 1536M
-          cpus: '1.5'
-          
+
   # === MONITORING & OBSERVABILITY ===
   
   cadvisor:
@@ -229,28 +231,38 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
-    restart: unless-stopped
+    restart: on-failure:5
     networks: [smarthome]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports: ["9090:9090"]
+    environment:
+      - TZ=UTC
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.time=15d'
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
     volumes:
       - /home/milan/docker_data/prometheus:/prometheus
       - /home/milan/docker_data/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /home/milan/docker_data/prometheus/rules:/etc/prometheus/rules:ro
       - /home/milan/docker_data/prometheus/ha_token.txt:/etc/prometheus/ha_token.txt:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 45s
+      timeout: 10s
+      retries: 2
+      start_period: 90s
     deploy:
       resources:
         limits:
           memory: 400M
           cpus: '0.5'
+          pids: 256
         reservations:
-          memory: 128M
+          memory: 256M
 
   blackbox-exporter:
     image: prom/blackbox-exporter:latest
@@ -267,23 +279,75 @@ services:
           memory: 64M
           cpus: '0.1'
 
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["9093:9093"]
+    environment:
+      - TZ=UTC
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - /home/milan/docker_data/alertmanager:/alertmanager
+      - /home/milan/docker_data/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+        reservations:
+          memory: 32M
+
+  alert-telegram-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.alert_clean
+    container_name: alert-telegram-bridge
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["9999:9999"]
+    environment:
+      - TZ=UTC
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9999/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.1'
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
-    restart: unless-stopped
+    restart: on-failure:5
     networks: [smarthome]
     ports: ["3000:3000"]
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
+      - TZ=UTC
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     volumes:
       - /home/milan/docker_data/grafana:/var/lib/grafana
       - /home/milan/docker_data/grafana/provisioning:/etc/grafana/provisioning
       - /home/milan/docker_data/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on: [prometheus]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 2
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -309,7 +373,7 @@ services:
   duplicati:
     image: linuxserver/duplicati:latest
     container_name: duplicati
-    restart: unless-stopped
+    restart: on-failure:3
     networks: [smarthome]
     ports: ["8200:8200"]
     environment:
@@ -325,6 +389,12 @@ services:
       - /home/milan/.env:/source/.env:ro
       - /home/milan/scripts:/source/scripts:ro
       - /home/milan/backups:/backups
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8200/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 2
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -347,6 +417,11 @@ services:
       - /home/milan:/config/workspace
     ports:
       - 8443:8443
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1'
 
   watchtower:
     image: containrrr/watchtower
@@ -388,6 +463,16 @@ services:
     volumes:
       - ./docker_data/changelog:/usr/share/nginx/html:ro
 
+  milanbuchta:
+    image: nginx:alpine
+    container_name: milanbuchta
+    restart: unless-stopped
+    networks: [smarthome]
+    ports: ["8093:80"]
+    volumes:
+      - ./docker_data/milanbuchta:/usr/share/nginx/html:ro
+      - ./docker_data/milanbuchta/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
   gym-tracker-next:
     build: ./gym-tracker-next
     container_name: gym-tracker-next
@@ -398,15 +483,14 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me}
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - DATA_DIR=/app/data
-      - INFISICAL_TOKEN=${INFISICAL_TOKEN:-}
-      - INFISICAL_SITE_URL=http://infisical:8080
     volumes:
       - ./docker_data/gym-tracker/data:/app/data
       - ./docker_data/gym-tracker/static/uploads:/app/public/uploads
-    depends_on:
-      infisical:
-        condition: service_healthy
-        required: false
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
 
   gym-tracker:
     build: ./docker_data/gym-tracker
@@ -427,100 +511,52 @@ services:
       - ./docker_data/gym-tracker/data:/app/data
       - ./docker_data/gym-tracker/templates:/app/templates
       - ./docker_data/gym-tracker/static:/app/static
-
-  # === SECRETS MANAGEMENT ===
-
-  infisical-db:
-    image: postgres:14-alpine
-    container_name: infisical-db
-    restart: unless-stopped
-    networks: [smarthome]
-    environment:
-      POSTGRES_DB: infisical
-      POSTGRES_USER: infisical
-      POSTGRES_PASSWORD: ${INFISICAL_DB_PASSWORD:-infisical-db-pass}
-    volumes:
-      - /home/milan/docker_data/infisical/db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U infisical"]
-      interval: 5s
-      retries: 10
     deploy:
       resources:
         limits:
           memory: 256M
           cpus: '0.5'
 
-  infisical-redis:
-    image: redis:7-alpine
-    container_name: infisical-redis
-    restart: unless-stopped
-    networks: [smarthome]
-    command: redis-server --requirepass ${INFISICAL_REDIS_PASSWORD:-infisical-redis-pass}
-    volumes:
-      - /home/milan/docker_data/infisical/redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${INFISICAL_REDIS_PASSWORD:-infisical-redis-pass}", "ping"]
-      interval: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: '0.25'
-
-  infisical:
-    image: infisical/infisical:latest-postgres
-    container_name: infisical
-    restart: unless-stopped
-    networks: [smarthome]
-    ports: ["8096:8080"]
-    depends_on:
-      infisical-db:
-        condition: service_healthy
-      infisical-redis:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      DB_CONNECTION_URI: postgresql://infisical:${INFISICAL_DB_PASSWORD:-infisical-db-pass}@infisical-db:5432/infisical
-      REDIS_URL: redis://:${INFISICAL_REDIS_PASSWORD:-infisical-redis-pass}@infisical-redis:6379
-      ENCRYPTION_KEY: ${INFISICAL_ENCRYPTION_KEY}
-      AUTH_SECRET: ${INFISICAL_AUTH_SECRET}
-      SITE_URL: http://100.74.234.99:8096
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_FROM_ADDRESS: ${SMTP_FROM:-noreply@milanbuchta.com}
-      SMTP_FROM_NAME: Infisical
-      SMTP_USERNAME: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASS:-}
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/status"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.75'
-
   # cloudflared läuft als systemd service auf dem Host (nicht Docker)
   # sudo systemctl status cloudflared
 
-  whisper:
-    image: rhasspy/wyoming-whisper:latest
-    container_name: whisper
+  # === SYNCTHING & OBSIDIAN ===
+
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: syncthing
     restart: unless-stopped
     networks: [smarthome]
-    ports: ["10300:10300"]
-    command: --model tiny-int8 --language de
+    ports:
+      - "8384:8384"  # Web UI
+      - "22000:22000/tcp"  # Sync protocol
+      - "22000:22000/udp"  # Sync protocol UDP
+      - "21027:21027/udp"  # Discovery
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Berlin
+    volumes:
+      - /home/milan/docker_data/syncthing:/var/syncthing
+      - /home/milan/obsidian-vault:/obsidian-vault
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: '1'
+          memory: 256M
+          cpus: '0.5'
 
+  # === PERFEKTES ZUHAUSE ===
+  perfektes-zuhause:
+    build: /home/milan/perfektes-zuhause
+    container_name: perfektes-zuhause
+    restart: unless-stopped
+    networks: [smarthome]
+    ports:
+      - "8093:3000"
+    env_file:
+      - /home/milan/perfektes-zuhause/.env.local
+    environment:
+      - NODE_ENV=production
 
 volumes:
   portainer_data:
