@@ -38,6 +38,9 @@ services:
       - /home/milan/docker_data/homeassistant:/config
       - /run/dbus:/run/dbus:ro
       - /etc/localtime:/etc/localtime:ro
+      # Patch: fido2 win_api.py (Windows-only) bricht asyncssh-Import auf Linux/py3.14
+      # -> ssh_command (HACS) laedt nicht. Stub wirft ImportError, den asyncssh abfaengt.
+      - /home/milan/docker_data/ha-fido2-patch/win_api.py:/usr/local/lib/python3.14/site-packages/fido2/client/win_api.py:ro
     depends_on: [matter-server, openthread]
     cap_add:
       - NET_ADMIN
