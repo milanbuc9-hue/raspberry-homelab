@@ -8,6 +8,20 @@
 scripts/.ai-news-pg-cred-id
 scripts/.ai-news-workflow-id
 
+# Persönliche / experimentelle Scripts (nicht versionieren – PII / Dev-Iterationen)
+alert_webhook_*.py
+fill_dibe*.py
+scrape_webuntis.py
+telegram_mock_server.py
+send_test_alert.sh
+DEPRECATED_WEBHOOKS/
+*.bak.*
+# Reports mit eingebetteten Tokens
+MCP_FINAL_SETUP_REPORT.md
+MONITORING_FINAL_COMPLETE.md
+MONITORING_PRODUCTION_READY.md
+mcp/QUICKSTART.md
+
 # Codex (Auth-Tokens, Session-Logs, persönlicher Kontext)
 .codex/
 
