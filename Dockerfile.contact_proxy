@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY contact_proxy.py .
+
+ENV TELEGRAM_BOT_TOKEN=""
+ENV TELEGRAM_CHAT_ID=""
+ENV PORT="8080"
+
+EXPOSE 8080
+
+CMD ["python3", "contact_proxy.py"]

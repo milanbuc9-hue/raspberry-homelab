@@ -468,10 +468,30 @@ services:
     container_name: milanbuchta
     restart: unless-stopped
     networks: [smarthome]
-    ports: ["8093:80"]
+    ports: ["8092:80"]
     volumes:
       - ./docker_data/milanbuchta:/usr/share/nginx/html:ro
       - ./docker_data/milanbuchta/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+  contact-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.contact_proxy
+    container_name: contact-proxy
+    restart: unless-stopped
+    networks: [smarthome]
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 
   gym-tracker-next:
     build: ./gym-tracker-next
