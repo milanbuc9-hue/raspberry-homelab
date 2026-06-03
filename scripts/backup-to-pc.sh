@@ -13,18 +13,14 @@ KEEP_SNAPSHOTS=4
 KEEP_ENCRYPTED=7
 LOG_FILE="/home/milan/backups/logs/pc-backup.log"
 LAST_SUCCESS_FILE="/home/milan/backups/logs/last-pc-backup-success"
-TELEGRAM_BOT="8577766573:AAFkMIeGMRaE9tTGP8S1L6cJrP1ebDNgKNU"
-TELEGRAM_CHAT="6372069186"
+NOTIFY="/home/milan/scripts/notify.sh"
 GPG_PASSPHRASE="${GPG_PASSPHRASE:-$(grep GPG_PASSPHRASE /home/milan/.env | cut -d= -f2)}"
 
 # ---- Hilfsfunktionen ----
 log() { echo "[$(date '+%d.%m.%Y %H:%M:%S')] $*" | tee -a "$LOG_FILE"; }
-
-telegram() {
-  curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT}/sendMessage" \
-    -H "Content-Type: application/json" \
-    -d "{\"chat_id\":\"${TELEGRAM_CHAT}\",\"text\":\"$1\",\"parse_mode\":\"Markdown\"}" > /dev/null
-}
+notify()          { "$NOTIFY" "$1" "backup-to-pc" "normal"; }
+notify_critical() { "$NOTIFY" "$1" "backup-to-pc" "critical"; }
+notify_low()      { "$NOTIFY" "$1" "backup-to-pc" "low"; }
 
 # ---- PC Online? ----
 if ! ping -c 1 -W 3 "$PC_IP" > /dev/null 2>&1; then
@@ -35,7 +31,7 @@ fi
 if ! ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=no \
     "${PC_USER}@${PC_IP}" "mkdir -p ${PC_DEST}" 2>/dev/null; then
   log "ERROR: PC online aber SSH nicht erreichbar (${PC_IP})"
-  telegram "⚠️ *Backup-Fehler*\nPC ist online aber SSH schlägt fehl.\nBitte SSH auf dem PC prüfen."
+  notify_critical "⚠️ *Backup-Fehler*\nPC ist online aber SSH schlägt fehl.\nBitte SSH auf dem PC prüfen."
   exit 1
 fi
 
@@ -133,11 +129,11 @@ if [ $RSYNC_EXIT -eq 0 ]; then
     GPG_STATUS="🔒 Encrypted: bereits heute erstellt"
   fi
 
-  # Telegram nur einmal täglich bei Erfolg
-  LAST_NOTIFIED="/home/milan/backups/logs/last-telegram-success"
+  # WhatsApp nur einmal täglich bei Erfolg
+  LAST_NOTIFIED="/home/milan/backups/logs/last-whatsapp-success"
   LAST_DAY=$(cat "$LAST_NOTIFIED" 2>/dev/null || echo "")
   if [ "$LAST_DAY" != "$TODAY" ]; then
-    telegram "✅ *Backup auf PC erfolgreich*\n$(date '+%d.%m.%Y %H:%M')\nSnapshots: ${SIZE} | Dauer: ${DURATION}s\n${GPG_STATUS}"
+    notify_low "✅ *Backup auf PC erfolgreich*\n$(date '+%d.%m.%Y %H:%M')\nSnapshots: ${SIZE} | Dauer: ${DURATION}s\n${GPG_STATUS}"
     echo "$TODAY" > "$LAST_NOTIFIED"
   fi
 else
@@ -147,7 +143,7 @@ else
     NOW=$(date +%s)
     AGE=$((NOW - LAST))
     if [ $AGE -gt 86400 ]; then
-      telegram "🔴 *Backup-Alarm!*\nKein erfolgreiches PC-Backup seit 24+ Stunden!\nLetztes Backup: $(date -d @$LAST '+%d.%m.%Y %H:%M')"
+      notify_critical "🔴 *Backup-Alarm!*\nKein erfolgreiches PC-Backup seit 24+ Stunden!\nLetztes Backup: $(date -d @$LAST '+%d.%m.%Y %H:%M')"
     fi
   fi
 fi
